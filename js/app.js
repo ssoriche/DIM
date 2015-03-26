@@ -45,35 +45,35 @@ var dialog = new (function(){
 });
 
 var activeElement;
-var moveItemPositionHandler = function(element){
+var moveItemPositionHandler = function(element, item){
 	return function(){
-		if (element	== activeElement){
-			$( "#move-popup" ).hide();
-			activeElement = null;
-		}	
-		else {
-			activeElement = element;
-			$( "#move-popup" ).show().position({
-				my: "left bottom",
-				at: "left top",
-				collision: "none fit",
-				of: element
-			});
+		if (app.loadoutMode() == true){
+			if (app.activeLoadout().ids().indexOf( item._id )>-1)
+				app.activeLoadout().ids.remove(item._id);
+			else
+				app.activeLoadout().ids.push(item._id);
 		}
+		else {
+			if (element	== activeElement){
+				$( "#move-popup" ).hide();
+				activeElement = null;
+			}	
+			else {
+				activeElement = element;
+				$( "#move-popup" ).show().position({
+					my: "left bottom",
+					at: "left top",
+					collision: "none fit",
+					of: element
+				});
+			}
+		}	
 	}
 }
 
 ko.bindingHandlers.moveItem = {
     init: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
-        // This will be called when the binding is first applied to an element
-        // Set up any initial state, event handlers, etc. here
-		$(element).bind("click", moveItemPositionHandler(element));
-    },
-    update: function(element, valueAccessor, allBindings, viewModel, bindingContext) {
-        // This will be called once when the binding is first applied to an element,
-        // and again whenever any observables/computeds that are accessed change
-        // Update the DOM element based on the supplied values here.
-		//$(element).bind("click", moveItemPositionHandler(element));
+		$(element).bind("click", moveItemPositionHandler(element, viewModel));
     }
 };
 
@@ -82,6 +82,68 @@ var filterItemByType = function(type, isEquipped){
 		if (weapon.bucketType == type && weapon.isEquipped() == isEquipped)
 			return weapon;
 	}
+}
+
+var Loadout = function(model){
+	var self = this;
+	
+	_.each(model, function(value, key){
+		self[key] = value;
+	});	
+	this.name = self.name || "";
+	this.ids = ko.observableArray(self.ids || []);
+	this.setActive = function(){
+		app.loadoutMode(true);
+		app.activeLoadout(self);
+	}
+	this.remove = function(){
+		app.loadouts.remove(self);
+		app.createLoadout();
+		app.saveLoadout();
+	}
+	this.items = ko.computed(function(){
+		var _items = _.map(self.ids(), function(instanceId){
+			var itemFound;
+			app.characters().forEach(function(character){
+				['weapons','armor'].forEach(function(list){
+					var match = _.findWhere(character[list]() , { _id: instanceId });
+					if (match) itemFound = match;
+				});
+			});
+			return itemFound;
+		});	
+		return _items;
+	});
+	this.transfer = function(targetCharacterId){
+		var itemIndex = -1;
+		var transferNextItem = function(){
+			var item = self.items()[++itemIndex];
+			item.store(targetCharacterId, function(targetProfile){
+				//check the length of items in the target profile
+				//if the length of items is 10 then transfer something out
+				//avoid a glitch by preventing the user from creating a loudout with more than 10 items per bucket
+				var targetBucket = _.where( targetProfile[item.list](), { bucketType: item.bucketType });
+				if (targetBucket.length == 10){
+					//attempt to move something out one at a time
+					//check 1. the item is not part of this loadout (self.items)
+					//check 2. how to decide where im going to move it to?
+				}
+			});
+		}	
+		//transferNextItem();
+		/* before starting the transfer we need to decide what strategy we are going to use */
+		/* strategy one involves simply moving the items across assuming enough space to fit in both without having to move other things */
+		/* strategy two involves looking into the target bucket and creating pairs for an item that will be removed for it */
+		var targetBucket = _.findWhere( app.characters(), { id: targetCharacterId })[item.list]();
+		console.log(targetBucket);
+	}
+}
+
+Loadout.prototype.toJSON = function(){
+    var copy = ko.toJS(this); //easy way to get a clean copy
+	//copy.items = _.pluck(copy.items, '_id'); //strip out items metadata
+	delete copy.items;
+	return copy;
 }
 
 var Profile = function(model){
@@ -113,7 +175,7 @@ var Item = function(model, profile, list){
 	this.character = profile;
 	this.href = "https://destinydb.com/items/" + self.id;
 	this.isEquipped = ko.observable(self.isEquipped);
-	this.moveItem = function(){
+	this.setActiveItem = function(){
 		app.activeItem(self);
 	}
 	this.primaryStat = self.primaryStat || "";
@@ -129,7 +191,7 @@ var Item = function(model, profile, list){
 		return foundPerk;
 	}
 	this.hashProgress = function(state){
-		if (typeof self.progression !== "undefined"){
+		if (self.progression){
 			/* Missing XP */
 			if (state == 1 && self.progression == false){
 				return true;
@@ -188,7 +250,7 @@ var Item = function(model, profile, list){
 						item.equip(self.characterId, function(isEquipped){
 							//console.log("result was " + isEquipped);
 							if (isEquipped == true){ otherEquipped = true; callback(); }
-							else { tryNextItem(); /*console.log("tryNextItem")*/ }
+							else { tryNextItem(); console.log("tryNextItem") }
 						});				
 					}
 					else {
@@ -373,19 +435,11 @@ var app = new (function() {
 		shareUrl: "",
 		showMissing: false
 	};
+	this.loadoutMode = ko.observable(false);
+	this.activeLoadout = ko.observable(new Loadout());
+	this.loadouts = ko.observableArray();
 	this.searchKeyword = ko.observable(defaults.searchKeyword);
-	var _doRefresh = ko.observable(defaults.doRefresh);
-	this.doRefresh = ko.computed({
-		read: function(){
-			return _doRefresh();
-		},
-		write: function(newValue){
-			chrome.storage.sync.set({
-			  'autoRefresh': newValue
-			}, function() { });
-			_doRefresh(newValue);
-		}
-	});
+	this.doRefresh = ko.observable(defaults.doRefresh);
 	this.refreshSeconds = ko.observable(defaults.refreshSeconds);
 	this.tierFilter = ko.observable(defaults.tierFilter);
 	this.typeFilter = ko.observable(defaults.typeFilter);
@@ -407,6 +461,20 @@ var app = new (function() {
 			return a.order - b.order;
 		});
 	});
+	
+	this.createLoadout = function(){
+		self.loadoutMode(true);
+		self.activeLoadout(new Loadout());
+	}
+	this.cancelLoadout = function(){
+		self.loadoutMode(false);
+	}
+	this.saveLoadout = function(){
+		self.loadouts.push( self.activeLoadout() );
+		self.activeLoadout(null);
+		var loadouts = ko.toJSON(self.loadouts());
+		chrome.storage.sync.set({ loadouts: loadouts }, function(){ /*console.log("done saving");*/ });
+	}
 	
 	this.showHelp = function(){
 		$.get("help.html", function(content){ dialog.title("Help").content(content).show(); });
@@ -558,7 +626,7 @@ var app = new (function() {
 				var avatars = e.data.characters;
 				self.bungie.vault(function(results){
 					var buckets = results.data.buckets;
-					var profile = new Profile({ order: 0, gender: "Tower",  classType: "Vault", id: "Vault", level: "", icon: "", background: "" });
+					var profile = new Profile({ race: "", order: 0, gender: "Tower",  classType: "Vault", id: "Vault", level: "", icon: "", background: "" });
 					var def = results.definitions.items;
 					var def_perks = results.definitions.perks;
 					
@@ -629,13 +697,16 @@ var app = new (function() {
 		self.bungie = new bungie();
 		self.loadData();
 		self.doRefresh.subscribe(self.refreshHandler);
-		self.refreshSeconds.subscribe(self.refreshHandler);		
-		chrome.storage.sync.get("autoRefresh", function(result){
-			if ("autoRefresh" in result){
-				_doRefresh(result.autoRefresh);
-			}
-			self.refreshHandler();
-		});
+		self.refreshSeconds.subscribe(self.refreshHandler);
+		self.refreshHandler();
+		chrome.storage.sync.get('loadouts', function(result) {
+		  if (result.loadouts){
+		  	var loadouts = JSON.parse(result.loadouts);
+			_.each(loadouts, function(loadout){				
+				self.loadouts.push(new Loadout(loadout));
+			});
+		  }
+	    });
 		$(window).click(function(e){
 			if (e.target.className !== "itemImage") {
 				$("#move-popup").hide();
