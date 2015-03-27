@@ -110,32 +110,85 @@ var Loadout = function(model){
 					if (match) itemFound = match;
 				});
 			});
-			return itemFound;
+			return ko.toJS(itemFound);
 		});	
 		return _items;
 	});
-	this.transfer = function(targetCharacterId){
+	/* the object with the .store function has to be the one in app.characters not this copy */
+	this.findReference = function(item){
+		var c = _.findWhere(app.characters(),{ id: item.character.id });
+		var x = _.findWhere(c[item.list](),{ _id: item._id });
+		return x;
+	}
+	this.swapItems = function(swapArray, targetCharacterId){
 		var itemIndex = -1;
 		var transferNextItem = function(){
-			var item = self.items()[++itemIndex];
-			item.store(targetCharacterId, function(targetProfile){
-				//check the length of items in the target profile
-				//if the length of items is 10 then transfer something out
-				//avoid a glitch by preventing the user from creating a loudout with more than 10 items per bucket
-				var targetBucket = _.where( targetProfile[item.list](), { bucketType: item.bucketType });
-				if (targetBucket.length == 10){
-					//attempt to move something out one at a time
-					//check 1. the item is not part of this loadout (self.items)
-					//check 2. how to decide where im going to move it to?
-				}
-			});
-		}	
-		//transferNextItem();
-		/* before starting the transfer we need to decide what strategy we are going to use */
-		/* strategy one involves simply moving the items across assuming enough space to fit in both without having to move other things */
-		/* strategy two involves looking into the target bucket and creating pairs for an item that will be removed for it */
-		var targetBucket = _.findWhere( app.characters(), { id: targetCharacterId })[item.list]();
-		console.log(targetBucket);
+			console.log("itemIndex " + itemIndex);
+			var pair = swapArray[++itemIndex];
+			if (pair){
+				console.log(pair);
+				/* at this point it doesn't matter who goes first but lets transfer the loadout first */
+				var owner = pair.targetItem.character.id;
+				console.log("going to transfer first item " + pair.targetItem.description);
+				self.findReference(pair.targetItem).store(targetCharacterId, function(targetProfile){			
+					console.log("xfered it, now to transfer next item " + pair.swapItem.description);	
+					self.findReference(pair.swapItem).store(owner, function(){
+						console.log("xfered that too, now to the next pair");
+						transferNextItem();
+					});
+				});
+			}
+		}
+		app.loadoutMode(false);
+		transferNextItem();
+	}
+	/* before starting the transfer we need to decide what strategy we are going to use */
+	/* strategy one involves simply moving the items across assuming enough space to fit in both without having to move other things */
+	/* strategy two involves looking into the target bucket and creating pairs for an item that will be removed for it */	
+	this.transfer = function(targetCharacterId){
+		var targetCharacter = _.findWhere( app.characters(), { id: targetCharacterId });
+		['weapons','armor'].forEach(function(list){			
+			var sourceItems =  _.where( self.items(), { list: list });
+			if (sourceItems.length > 0){
+				var targetList = targetCharacter[list]();				
+				var sourceGroups = _.groupBy( sourceItems, 'bucketType' );
+				var targetGroups = _.groupBy( targetList, 'bucketType' );	
+				_.each(sourceGroups, function(group, key){
+					var sourceBucket = sourceGroups[key];
+					var targetBucket = targetGroups[key];
+					/* use the swap item strategy */
+					/* by finding a random item in the targetBucket that isnt part of sourceBucket */					
+					if (sourceBucket.length + targetBucket.length > 9){
+						var sourceBucketIds = _.pluck( sourceBucket, "_id");
+						var swapArray = _.map(sourceBucket, function(item){
+							var itemFound = false;
+							var swapItem = _.filter(targetBucket, function(otherItem){
+								/* if the otherItem is not part of the sourceBucket then it can go */
+								if ( sourceBucketIds.indexOf( otherItem._id ) == -1 && itemFound == false){
+									itemFound = true;
+									sourceBucketIds.push(otherItem._id);
+									return otherItem;
+								}
+							})[0];
+							return {
+								targetItem: item,
+								swapItem: swapItem,
+								description: item.description + "'s swap item is " + swapItem.description
+							}
+						});
+						$("#loadoutConfirm").show().click(function(){
+							self.swapItems(swapArray, targetCharacterId);
+						});
+						dialog.title("Transfer Confirm").content(swapTemplate({ swapArray: swapArray })).show(function(){							
+							$("#loadoutConfirm").hide();
+						});
+					}
+					else {
+						/* do a clean move */
+					}
+				});	
+			}			
+		});
 	}
 }
 
@@ -237,18 +290,20 @@ var Item = function(model, profile, list){
 	});
 	/* helper function that unequips the current item in favor of anything else */
 	this.unequip = function(callback){
+		console.log('trying to unequip too!');
 		if (self.isEquipped() == true){
+			console.log("and its actually equipped");
 			var otherEquipped = false, itemIndex = -1;
 			var otherItems = _.where( self.character[self.list](), { bucketType: self.bucketType });
 			var tryNextItem = function(){			
 				var item = otherItems[++itemIndex];
-				//console.log(item.description);
+				console.log(item.description);
 				/* still haven't found a match */
 				if (otherEquipped == false){
 					if (item != self){
-						//console.log("trying to equip " + item.description);
+						console.log("trying to equip " + item.description);
 						item.equip(self.characterId, function(isEquipped){
-							//console.log("result was " + isEquipped);
+							console.log("result was " + isEquipped);
 							if (isEquipped == true){ otherEquipped = true; callback(); }
 							else { tryNextItem(); console.log("tryNextItem") }
 						});				
@@ -263,6 +318,7 @@ var Item = function(model, profile, list){
 			//console.log("tryNextItem")
 		}
 		else {
+			console.log("but not equipped");
 			callback();
 		}
 	}
@@ -297,48 +353,61 @@ var Item = function(model, profile, list){
 			});
 		}
 	}
-	this.transfer = function(sourceCharacterId, targetCharacterId, amount, cb){
-		var isVault = targetCharacterId == "Vault";
-		app.bungie.transfer(isVault ? sourceCharacterId : targetCharacterId, self._id, self.id, amount, isVault, function(e, result){
-			if (result.Message == "Ok"){
-				ko.utils.arrayFirst(app.characters(), function(character){
-					if (character.id == sourceCharacterId){
-						character[self.list].remove(self);
-					}
-					else if (character.id == targetCharacterId){
-						self.characterId = targetCharacterId;
-						self.character = character;
-						character[self.list].push(self);
-						if (cb) cb(character);
-					}
-				});				
-			}
-			else {
-				alert(result.Message);
-			}
-		});
+	
+	this.transfer = function(sourceCharacterId, targetCharacterId, amount, cb){		
+		console.log(arguments);
+		setTimeout(function(){
+			var isVault = targetCharacterId == "Vault";			
+			app.bungie.transfer(isVault ? sourceCharacterId : targetCharacterId, self._id, self.id, amount, isVault, function(e, result){
+				if (result.Message == "Ok"){
+					console.log("transfer complete");
+					console.log(result);
+					var x,y;
+					_.each(app.characters(), function(character){
+						if (character.id == sourceCharacterId){
+							console.log("removing reference of myself ( " + self.description + " ) in " + character.classType + " from the list of " + self.list);
+							x = character;
+						}
+						else if (character.id == targetCharacterId){
+							console.log("adding a reference of myself ( " + self.description + " ) to this guy " + character.classType);
+							y = character;
+						}
+					});
+					self.characterId = targetCharacterId
+					self.character = y;
+					y[self.list].push(self);
+					x[self.list].remove(self);					
+					if (cb) cb(y,x);
+				}
+				else {
+					alert(result.Message);
+				}
+			});		
+		}, 1000);
 	}
+	
 	this.store = function(targetCharacterId, callback){
 		var sourceCharacterId = self.characterId, transferAmount = 1;
 		var done = function(){
 			if (targetCharacterId == "Vault"){
-				//console.log("from character to vault");
+				console.log("from character to vault");
 				self.unequip(function(){
+					console.log("calling transfer from character to vault");
 					self.transfer(sourceCharacterId, "Vault", transferAmount, callback);
 				});
 			}
 			else if (sourceCharacterId !== "Vault"){
-				//console.log("from character to vault to character");
+				console.log("from character to vault to character");
 				self.unequip(function(){
-					//console.log("unquipped item");
+					console.log("unquipped item");
 					self.transfer(sourceCharacterId, "Vault", transferAmount, function(){
-						//console.log("xfered item to vault");
+						console.log("xfered item to vault");
 						self.transfer("Vault", targetCharacterId, transferAmount, callback);
 					});
 				});
 			}
 			else {
-				//console.log("from vault to character");
+				console.log("from vault to character");
 				self.transfer("Vault", targetCharacterId, transferAmount, callback);
 			}		
 		}
@@ -406,6 +475,33 @@ var _collectionsFix = {
 	"ironArmor": []
 }
 
+/*
+targetItem: item,
+swapItem: swapItem,
+description: item.description + "'s swap item is " + swapItem.description
+*/
+var swapTemplate = _.template('<ul class="list-group">' +	
+	'<% swapArray.forEach(function(pair){ %>' +
+		'<li class="list-group-item">' +
+			'<div class="row">' +
+				'<div class="col-lg-8 col-md-offset-3">' +
+					'<%= pair.description %>' +
+				'</div>' +
+				'<div class="col-lg-4 col-md-offset-3">' +
+					'<a class="item" href="<%= pair.targetItem.href %>">' + 
+						'<img class="itemImage" src="<%= pair.targetItem.icon %>">' +
+					'</a>' +
+				'</div>' +
+				'<div class="col-lg-4">' +
+					'<a class="item" href="<%= pair.swapItem.href %>">' + 
+						'<img class="itemImage" src="<%= pair.swapItem.icon %>">' +
+					'</a>' +
+				'</div>' +
+			'</div>' +
+		'</li>' +
+	'<% }) %>' +
+'</ul>');
+
 var perksTemplate = _.template('<div class="destt-talent">' +
 	'<% perks.forEach(function(perk){ %>' +
 		'<div class="destt-talent-wrapper">' +
@@ -417,7 +513,7 @@ var perksTemplate = _.template('<div class="destt-talent">' +
 			'</div>' +
 		'</div>' +
 	'<% }) %>' +
-'</div>')
+'</div>');
 		
 var app = new (function() {
 	var self = this;
