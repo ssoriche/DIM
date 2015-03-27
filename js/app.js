@@ -158,7 +158,7 @@ var Loadout = function(model){
 				var targetList = targetCharacter[list]();				
 				var sourceGroups = _.groupBy( sourceItems, 'bucketType' );
 				var targetGroups = _.groupBy( targetList, 'bucketType' );	
-				_.each(sourceGroups, function(group, key){
+				var masterSwapArray = _.flatten(_.map(sourceGroups, function(group, key){
 					var sourceBucket = sourceGroups[key];
 					var targetBucket = targetGroups[key];
 					/* use the swap item strategy */
@@ -181,17 +181,18 @@ var Loadout = function(model){
 								description: item.description + "'s swap item is " + swapItem.description
 							}
 						});
-						$("#loadoutConfirm").show().click(function(){
-							self.swapItems(swapArray, targetCharacterId);
-						});
-						dialog.title("Transfer Confirm").content(swapTemplate({ swapArray: swapArray })).show(function(){							
-							$("#loadoutConfirm").hide();
-						});
+						return swapArray;
 					}
 					else {
-						/* do a clean move */
+						/* do a clean move by returning a swap object without a swapItem */
 					}
-				});	
+				}));
+				$("#loadoutConfirm").show().click(function(){
+					self.swapItems(masterSwapArray, targetCharacterId);
+				});
+				dialog.title("Transfer Confirm").content(swapTemplate({ swapArray: masterSwapArray })).show(function(){							
+					$("#loadoutConfirm").hide();
+				});
 			}			
 		});
 	}
@@ -417,7 +418,7 @@ var Item = function(model, profile, list){
 			}		
 		}
 		if (self.bucketType == "Materials" || self.bucketType == "Consumables"){
-			dialog.title("Transfer Materials").content("<div>Transfer Amount: <input type='text' id='materialsAmount' value='1'></div>").show(function(event){			
+			dialog.title("Transfer Materials").content("<div>Transfer Amount: <input type='text' id='materialsAmount' value='" + self.primaryStat + "'></div>").show(function(event){
 				transferAmount = parseInt($("input#materialsAmount").val());
 				if (!isNaN(transferAmount))	done();
 				else alert("Invalid amount entered: " + transferAmount);
@@ -489,15 +490,15 @@ var swapTemplate = _.template('<ul class="list-group">' +
 	'<% swapArray.forEach(function(pair){ %>' +
 		'<li class="list-group-item">' +
 			'<div class="row">' +
-				'<div class="col-lg-8 col-md-offset-3">' +
+				'<div class="col-lg-6">' +
 					'<%= pair.description %>' +
 				'</div>' +
-				'<div class="col-lg-4 col-md-offset-3">' +
+				'<div class="col-lg-3">' +
 					'<a class="item" href="<%= pair.targetItem.href %>">' + 
 						'<img class="itemImage" src="<%= pair.targetItem.icon %>">' +
 					'</a>' +
 				'</div>' +
-				'<div class="col-lg-4">' +
+				'<div class="col-lg-3">' +
 					'<a class="item" href="<%= pair.swapItem.href %>">' + 
 						'<img class="itemImage" src="<%= pair.swapItem.icon %>">' +
 					'</a>' +
