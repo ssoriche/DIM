@@ -84,127 +84,6 @@ var filterItemByType = function(type, isEquipped){
 	}
 }
 
-var Loadout = function(model){
-	var self = this;
-	
-	_.each(model, function(value, key){
-		self[key] = value;
-	});	
-	this.name = self.name || "";
-	this.ids = ko.observableArray(self.ids || []);
-	this.setActive = function(){
-		app.loadoutMode(true);
-		app.activeLoadout(self);
-	}
-	this.remove = function(){
-		app.loadouts.remove(self);
-		app.createLoadout();
-		app.saveLoadout();
-	}
-	this.items = ko.computed(function(){
-		var _items = _.map(self.ids(), function(instanceId){
-			var itemFound;
-			app.characters().forEach(function(character){
-				['weapons','armor'].forEach(function(list){
-					var match = _.findWhere(character[list]() , { _id: instanceId });
-					if (match) itemFound = match;
-				});
-			});
-			return itemFound;
-		});	
-		return _items;
-	});
-	/* the object with the .store function has to be the one in app.characters not this copy */
-	this.findReference = function(item){
-		var c = _.findWhere(app.characters(),{ id: item.character.id });
-		var x = _.findWhere(c[item.list](),{ _id: item._id });
-		return x;
-	}
-	this.swapItems = function(swapArray, targetCharacterId){
-		var itemIndex = -1;
-		var transferNextItem = function(){
-			console.log("itemIndex " + itemIndex);
-			var pair = swapArray[++itemIndex];
-			if (pair){
-				console.log(pair);
-				/* at this point it doesn't matter who goes first but lets transfer the loadout first */
-				var owner = pair.targetItem.character.id;
-				console.log("going to transfer first item " + pair.targetItem.description);
-				self.findReference(pair.targetItem).store(targetCharacterId, function(targetProfile){			
-					console.log("xfered it, now to transfer next item " + pair.swapItem.description);	
-					self.findReference(pair.swapItem).store(owner, function(){
-						console.log("xfered that too, now to the next pair");
-						transferNextItem();
-					});
-				});
-			}
-			else {
-				alert("Items transferred successfully");
-				$('#basicModal').modal('hide');
-			}
-		}
-		app.activeLoadout(new Loadout());
-		app.loadoutMode(false);
-		transferNextItem();
-	}
-	/* before starting the transfer we need to decide what strategy we are going to use */
-	/* strategy one involves simply moving the items across assuming enough space to fit in both without having to move other things */
-	/* strategy two involves looking into the target bucket and creating pairs for an item that will be removed for it */	
-	this.transfer = function(targetCharacterId){
-		var targetCharacter = _.findWhere( app.characters(), { id: targetCharacterId });
-		['weapons','armor'].forEach(function(list){			
-			var sourceItems =  _.where( self.items(), { list: list });
-			if (sourceItems.length > 0){
-				var targetList = targetCharacter[list]();				
-				var sourceGroups = _.groupBy( sourceItems, 'bucketType' );
-				var targetGroups = _.groupBy( targetList, 'bucketType' );	
-				var masterSwapArray = _.flatten(_.map(sourceGroups, function(group, key){
-					var sourceBucket = sourceGroups[key];
-					var targetBucket = targetGroups[key];
-					/* use the swap item strategy */
-					/* by finding a random item in the targetBucket that isnt part of sourceBucket */					
-					if (sourceBucket.length + targetBucket.length > 9){
-						var sourceBucketIds = _.pluck( sourceBucket, "_id");
-						var swapArray = _.map(sourceBucket, function(item){
-							var itemFound = false;
-							var swapItem = _.filter(targetBucket, function(otherItem){
-								/* if the otherItem is not part of the sourceBucket then it can go */
-								if ( sourceBucketIds.indexOf( otherItem._id ) == -1 && itemFound == false){
-									itemFound = true;
-									sourceBucketIds.push(otherItem._id);
-									return otherItem;
-								}
-							})[0];
-							return {
-								targetItem: item,
-								swapItem: swapItem,
-								description: item.description + "'s swap item is " + swapItem.description
-							}
-						});
-						return swapArray;
-					}
-					else {
-						/* do a clean move by returning a swap object without a swapItem */
-					}
-				}));
-				$("#loadoutConfirm").show().click(function(){
-					self.swapItems(masterSwapArray, targetCharacterId);
-				});
-				dialog.title("Transfer Confirm").content(swapTemplate({ swapArray: masterSwapArray })).show(function(){							
-					$("#loadoutConfirm").hide();
-				});
-			}			
-		});
-	}
-}
-
-Loadout.prototype.toJSON = function(){
-    var copy = ko.toJS(this); //easy way to get a clean copy
-	//copy.items = _.pluck(copy.items, '_id'); //strip out items metadata
-	delete copy.items;
-	return copy;
-}
-
 var Profile = function(model){
 	var self = this;
 	_.each(model, function(value, key){
@@ -361,21 +240,18 @@ var Item = function(model, profile, list){
 	}
 	
 	this.transfer = function(sourceCharacterId, targetCharacterId, amount, cb){		
-		console.log(arguments);
 		setTimeout(function(){
 			var isVault = targetCharacterId == "Vault";			
 			app.bungie.transfer(isVault ? sourceCharacterId : targetCharacterId, self._id, self.id, amount, isVault, function(e, result){
 				if (result.Message == "Ok"){
-					console.log("transfer complete");
-					console.log(result);
 					var x,y;
 					_.each(app.characters(), function(character){
 						if (character.id == sourceCharacterId){
-							console.log("removing reference of myself ( " + self.description + " ) in " + character.classType + " from the list of " + self.list);
+							//console.log("removing reference of myself ( " + self.description + " ) in " + character.classType + " from the list of " + self.list);
 							x = character;
 						}
 						else if (character.id == targetCharacterId){
-							console.log("adding a reference of myself ( " + self.description + " ) to this guy " + character.classType);
+							//console.log("adding a reference of myself ( " + self.description + " ) to this guy " + character.classType);
 							y = character;
 						}
 					});
@@ -512,7 +388,7 @@ var perksTemplate = _.template('<div class="destt-talent">' +
 	'<% perks.forEach(function(perk){ %>' +
 		'<div class="destt-talent-wrapper">' +
 			'<div class="destt-talent-icon">' +
-				'<img src="https://desimg.zamimg.com/static/image/icons/gamedata/game-backgrounds/medium/<%= perk.hash %>.png">' +
+				'<img src="<%= perk.iconPath %>" width="36">' +
 			'</div>' +
 			'<div class="destt-talent-description">' +
 				'<%= perk.description %>' +
@@ -570,13 +446,8 @@ var app = new (function() {
 	}
 	this.cancelLoadout = function(){
 		self.loadoutMode(false);
-	}
-	this.saveLoadout = function(){
-		self.loadouts.push( self.activeLoadout() );
-		self.activeLoadout(null);
-		var loadouts = ko.toJSON(self.loadouts());
-		chrome.storage.sync.set({ loadouts: loadouts }, function(){ /*console.log("done saving");*/ });
-	}
+		self.activeLoadout(new Loadout());
+	}	
 	
 	this.showHelp = function(){
 		$.get("help.html", function(content){ dialog.title("Help").content(content).show(); });
@@ -613,7 +484,8 @@ var app = new (function() {
 	   	});
 		if (activeItem){		
 			if (activeItem.perks && $content.find(".destt-talent").length == 0){
-				$content.find(".destt-info").prepend(perksTemplate({ perks: activeItem.perks }));
+				var template = perksTemplate({ perks: activeItem.perks });
+				$content.find(".destt-info").prepend(template);
 			}
 			$content.find(".destt-primary-min").html( activeItem.primaryStat );
 		}
@@ -680,7 +552,7 @@ var app = new (function() {
 				itemObject.perks = item.perks.map(function(perk){
 					var p = perkDefs[perk.perkHash];
 					return {
-						hash: perk.iconPath.split("/")[4].split(".")[0],
+						iconPath: app.bungie.getUrl() + perk.iconPath,
 						name: p.displayName,
 						description: p.displayDescription
 					}
@@ -782,7 +654,7 @@ var app = new (function() {
 	
 	this.refreshHandler = function(){
 		clearInterval(self.refreshInterval);
-		if (self.doRefresh() == 1){
+		if (self.doRefresh() == 1 && self.loadoutMode() == false){
 			self.refreshInterval = setInterval(self.loadData, self.refreshSeconds() * 1000);
 		}
 	}
@@ -800,6 +672,7 @@ var app = new (function() {
 		self.loadData();
 		self.doRefresh.subscribe(self.refreshHandler);
 		self.refreshSeconds.subscribe(self.refreshHandler);
+		self.loadoutMode.subscribe(self.refreshHandler);
 		self.refreshHandler();
 		chrome.storage.sync.get('loadouts', function(result) {
 		  if (result.loadouts){
