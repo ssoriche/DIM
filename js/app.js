@@ -110,7 +110,7 @@ var Loadout = function(model){
 					if (match) itemFound = match;
 				});
 			});
-			return ko.toJS(itemFound);
+			return itemFound;
 		});	
 		return _items;
 	});
@@ -138,7 +138,12 @@ var Loadout = function(model){
 					});
 				});
 			}
+			else {
+				alert("Items transferred successfully");
+				$('#basicModal').modal('hide');
+			}
 		}
+		app.activeLoadout(new Loadout());
 		app.loadoutMode(false);
 		transferNextItem();
 	}
