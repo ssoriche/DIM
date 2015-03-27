@@ -18,9 +18,10 @@
 	<script language="JavaScript" type="text/javascript" src="/js/dependencies/bootstrap.js"></script>
     <script language="JavaScript" type="text/javascript" src="/js/dependencies/knockout.js"></script>
     <script language="JavaScript" type="text/javascript" src="/js/dependencies/underscore-min.js"></script>
+	<script language="JavaScript" type="text/javascript" src="/js/loadouts.js"></script>
     <script language="JavaScript" type="text/javascript" src="/js/app.js"></script>
-	<script language="JavaScript" type="text/javascript" src="js/destinydb.js"></script>
-	<script language="JavaScript" type="text/javascript" src="js/tooltips.min.js"></script>
+	<script language="JavaScript" type="text/javascript" src="/js/destinydb.js"></script>
+	<script language="JavaScript" type="text/javascript" src="/js/tooltips.min.js"></script>
   </head>
 
   <body>
@@ -118,6 +119,7 @@
 		          <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">Loadouts <span class="caret"></span></a>
 		          <ul class="dropdown-menu" role="menu">
 		            <li data-bind="click: createLoadout"><a href="#">Create</a></li>
+					<li data-bind="click: cancelLoadout"><a href="#">Cancel</a></li>
 					<li class="divider"></li>
 					<!-- ko foreach: { data: loadouts, as: 'loadout' } -->
 						<li data-bind="click: setActive"><a data-bind="text: loadout.name" href="#"></a></li>
@@ -225,9 +227,8 @@
 			<div class="content" data-bind="with: activeLoadout">
 				<div id="loadout-options">
 					<input id="loadout-name" type="search" data-bind="value: name" placeholder="Loadout Name...">
-					<span id="loadout-save" data-bind="click: $root.saveLoadout">Save</span>
+					<span id="loadout-save" data-bind="click: save">Save</span>
 					<span id="loadout-save" data-bind="click: remove">Delete</span>
-					<span id="loadout-cancel" data-bind="click: $root.cancelLoadout">Cancel</span>
 					<!-- ko foreach: { data: $root.characters, as: 'character' } -->
 						<div class="move-button move-loadout" data-bind="attr: { title: uniqueName }, click: function(){ $parent.transfer(character.id) }, style: { backgroundImage: icon }, text: classType"></div>
 		  			<!--/ko  -->
