@@ -10,10 +10,11 @@ function bungie() {
 
   var active = {id: 'loading'};
 
-	var _token, id = 0, requests = {};  
+	var _token, id = 0;
+	window.requests = {};  
 	window.addEventListener("message", function(event) {
-		console.log("response-message");
-		console.log(event.data);
+		var reply = event.data;
+		requests[reply.id].complete(JSON.parse(reply.response).Response, reply.response);
 	}, false);
 
   // private methods
@@ -72,12 +73,15 @@ function bungie() {
       }
     });*/
 	
-	var event = document.createEvent('CustomEvent');
-	opts.route = url + "Platform" + opts.route;
-	console.log(opts);
-	event.initCustomEvent("request-message", true, true, { id: id++, opts: opts });
-	requests[id] = opts;
-	document.documentElement.dispatchEvent(event);
+	//setTimeout(function(){
+		
+		var event = document.createEvent('CustomEvent');
+		opts.route = url + "Platform" + opts.route;
+		//console.log("call to _request:" + JSON.stringify(opts));
+		event.initCustomEvent("request-message", true, true, { id: ++id, opts: opts });
+		requests[id] = opts;
+		document.documentElement.dispatchEvent(event);
+	//}, 5000);
   }
 
   // privileged methods

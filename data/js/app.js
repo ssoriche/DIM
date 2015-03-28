@@ -702,8 +702,11 @@ var app = new (function() {
 	}
 	
 	this.init = function(){
-		self.bungie = new bungie();
-		self.loadData();
+		// until I figure out a solution for contentScriptWhen: "start" in main.js
+		setTimeout(function(){		
+			self.bungie = new bungie();
+			self.loadData();
+		}, 5000);
 		self.doRefresh.subscribe(self.refreshHandler);
 		self.refreshSeconds.subscribe(self.refreshHandler);
 		self.loadoutMode.subscribe(self.refreshHandler);
