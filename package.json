@@ -1,0 +1,12 @@
+{
+  "name": "div",
+  "title": "DIV",
+  "id": "jid1-OfZtSANv6gAjsw",
+  "description": "a basic add-on",
+  "author": "",
+  "license": "MPL 2.0",
+  "version": "0.1",
+  "permissions": {
+		"cross-domain-content": ["https://www.bungie.net/", "http://www.bungie.net/"]
+	}
+}
