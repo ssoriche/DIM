@@ -1,11 +1,11 @@
 {
-  "name": "div",
-  "title": "DIV",
+  "name": "destiny_item_viewer",
+  "title": "Destiny Item Viewer",
   "id": "jid1-OfZtSANv6gAjsw",
-  "description": "a basic add-on",
+  "description": "Robust interface to view weapons in Destiny.",
   "author": "",
   "license": "MPL 2.0",
-  "version": "0.1",
+  "version": "1.1.2f",
   "permissions": {
 		"cross-domain-content": ["https://www.bungie.net/", "http://www.bungie.net/"]
 	}
